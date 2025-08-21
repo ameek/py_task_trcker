@@ -1,3 +1,7 @@
+# this build with agent :: Calude sonnet 4
+
+it had the srs and supported doc but it still not finish 
+
 # Task Tracker Application
 
 A modern, beautiful task tracking application built with FastAPI (backend), Vue.js (frontend), and MongoDB (database). The application features a responsive design with Tailwind CSS and can be easily deployed using Docker.
