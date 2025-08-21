@@ -1,4 +1,4 @@
-# this build with agent :: Calude sonnet 4
+# this build with agent :: Claude sonnet 4
 
 it had the srs and supported doc but it still not finish 
 
