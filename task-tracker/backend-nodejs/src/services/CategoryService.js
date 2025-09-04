@@ -2,7 +2,12 @@ const Category = require('../models/Category');
 
 class CategoryService {
     static async getCategories(userId) {
-        return await Category.findByUserId(userId);
+        const categories = await Category.findByUserId(userId);
+        // Transform _id to id for frontend compatibility
+        return categories.map(category => ({
+            ...category,
+            id: category._id
+        }));
     }
 
     static async getCategoryById(categoryId) {
@@ -10,7 +15,11 @@ class CategoryService {
         if (!category) {
             throw new Error('Category not found');
         }
-        return category;
+        // Transform _id to id for frontend compatibility
+        return {
+            ...category,
+            id: category._id
+        };
     }
 
     static async createCategory(userId, categoryData) {
@@ -26,7 +35,11 @@ class CategoryService {
             color: color
         });
 
-        return category;
+        // Transform _id to id for frontend compatibility
+        return {
+            ...category,
+            id: category._id
+        };
     }
 
     static async updateCategory(categoryId, updates) {
@@ -40,7 +53,12 @@ class CategoryService {
             throw new Error('Failed to update category');
         }
 
-        return await Category.findById(categoryId);
+        const updatedCategory = await Category.findById(categoryId);
+        // Transform _id to id for frontend compatibility
+        return {
+            ...updatedCategory,
+            id: updatedCategory._id
+        };
     }
 
     static async deleteCategory(categoryId) {
@@ -58,7 +76,12 @@ class CategoryService {
     }
 
     static async getCategoryStats(userId) {
-        return await Category.getCategoryStats(userId);
+        const stats = await Category.getCategoryStats(userId);
+        // Transform _id to id for frontend compatibility
+        return stats.map(stat => ({
+            ...stat,
+            id: stat._id
+        }));
     }
 }
 

@@ -9,11 +9,11 @@ class TimerComponent {
     startTask(task) {
         // Stop any existing timer
         this.stopTimer();
-        
+
         this.activeTask = task;
         this.startTime = Date.now();
         this.elapsedTime = 0;
-        
+
         this.updateActiveTaskDisplay();
         this.startTimer();
     }
@@ -53,7 +53,7 @@ class TimerComponent {
 
     updateActiveTaskDisplay() {
         const activeTaskSection = document.getElementById('activeTaskSection');
-        
+
         if (this.activeTask) {
             activeTaskSection.style.display = 'block';
             document.getElementById('activeTaskTitle').textContent = this.activeTask.title;
@@ -66,11 +66,17 @@ class TimerComponent {
 
     async pauseActiveTask() {
         if (!this.activeTask) return;
-        
+
         try {
-            await apiService.pauseTask(this.activeTask.id); // Use id from backend
+            const taskId = this.activeTask._id || this.activeTask.id; // Use _id or id from backend
+            await apiService.pauseTask(taskId);
             this.pauseTask();
             Utils.showMessage('taskMessage', 'Task paused', 'success');
+
+            // Reload tasks to reflect changes
+            if (window.taskApp && window.taskApp.tasks) {
+                window.taskApp.tasks.loadTasks();
+            }
         } catch (error) {
             Utils.showMessage('taskMessage', `Failed to pause task: ${error.message}`, 'error');
         }
@@ -78,15 +84,21 @@ class TimerComponent {
 
     async finishActiveTask() {
         if (!this.activeTask) return;
-        
+
         if (!confirm('Are you sure you want to finish this task?')) {
             return;
         }
-        
+
         try {
-            await apiService.finishTask(this.activeTask.id); // Use id from backend
+            const taskId = this.activeTask._id || this.activeTask.id; // Use _id or id from backend
+            await apiService.finishTask(taskId);
             this.finishTask();
             Utils.showMessage('taskMessage', 'Task completed!', 'success');
+
+            // Reload tasks to reflect changes
+            if (window.taskApp && window.taskApp.tasks) {
+                window.taskApp.tasks.loadTasks();
+            }
         } catch (error) {
             Utils.showMessage('taskMessage', `Failed to finish task: ${error.message}`, 'error');
         }
@@ -105,6 +117,11 @@ class TimerComponent {
 
         // Pause all tasks button
         document.getElementById('pauseAllBtn')?.addEventListener('click', () => {
+            this.pauseAllTasks();
+        });
+
+        // Pause all tasks quick button
+        document.getElementById('pauseAllQuickBtn')?.addEventListener('click', () => {
             this.pauseAllTasks();
         });
     }

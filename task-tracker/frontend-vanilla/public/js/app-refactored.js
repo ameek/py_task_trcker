@@ -4,7 +4,7 @@ class TaskTrackerApp {
         this.auth = null;
         this.tasks = null;
         this.timer = null;
-        
+
         this.init();
     }
 
@@ -15,17 +15,17 @@ class TaskTrackerApp {
         this.timer = new TimerComponent();
         this.categories = new CategoryComponent(this);
         this.reports = new ReportComponent(this);
-        
+
         // Make taskComponent globally available for onclick handlers
         window.taskComponent = this.tasks;
-        
+
         // Setup event listeners
         this.setupKeyboardShortcuts();
         this.timer.setupEventListeners();
-        
+
         // Check for saved user session
         this.loadUserSession();
-        
+
         // Show appropriate section
         if (this.currentUser) {
             this.showDashboard();
@@ -55,7 +55,7 @@ class TaskTrackerApp {
             // Ensure we have both _id and id for compatibility
             user._id = user._id || user.id;
             user.id = user.id || user._id;
-            
+
             // Normalize to string
             if (typeof user._id === 'object' && user._id.$oid) {
                 user._id = user._id.$oid;
@@ -63,14 +63,14 @@ class TaskTrackerApp {
             if (typeof user.id === 'object' && user.id.$oid) {
                 user.id = user.id.$oid;
             }
-            
+
             user._id = String(user._id);
             user.id = String(user.id);
         }
-        
+
         this.currentUser = user;
         apiService.setCurrentUser(user);
-        
+
         if (user) {
             localStorage.setItem('currentUser', JSON.stringify(user));
         } else {
@@ -92,12 +92,21 @@ class TaskTrackerApp {
                 this.tasks.loadTasks(),
                 this.categories.loadCategories()
             ]);
-            
-            // Load active task if any
+
+            // Load active task if any - check for tasks with in_progress status
             try {
-                const activeTaskResponse = await apiService.getActiveTask();
-                if (activeTaskResponse && activeTaskResponse.active_task) {
-                    this.timer.startTask(activeTaskResponse.active_task);
+                // First check if there are any in_progress tasks
+                const activeTasks = this.tasks.tasks.filter(task => task.status === 'in_progress');
+                if (activeTasks.length > 0) {
+                    // Use the first active task (there should only be one)
+                    const activeTask = activeTasks[0];
+                    this.timer.startTask(activeTask);
+                } else {
+                    // Fallback: try to get active task from API
+                    const activeTaskResponse = await apiService.getActiveTask();
+                    if (activeTaskResponse && activeTaskResponse.active_task) {
+                        this.timer.startTask(activeTaskResponse.active_task);
+                    }
                 }
             } catch (error) {
                 console.log('No active task found or error loading active task:', error.message);
@@ -173,14 +182,14 @@ class TaskTrackerApp {
 
     toggleKeyboardShortcuts() {
         let shortcutsDiv = document.getElementById('keyboardShortcuts');
-        
+
         if (!shortcutsDiv) {
             shortcutsDiv = this.createKeyboardShortcutsDisplay();
             document.body.appendChild(shortcutsDiv);
         }
-        
+
         shortcutsDiv.classList.toggle('visible');
-        
+
         // Auto-hide after 5 seconds
         if (shortcutsDiv.classList.contains('visible')) {
             setTimeout(() => {
@@ -217,7 +226,7 @@ class TaskTrackerApp {
             </div>
             <button class="close-shortcuts" onclick="this.parentElement.classList.remove('visible')">×</button>
         `;
-        
+
         return shortcutsDiv;
     }
 }

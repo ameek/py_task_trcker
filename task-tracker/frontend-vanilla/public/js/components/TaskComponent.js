@@ -7,7 +7,7 @@ class TaskComponent {
         this.searchTerm = '';
         this.currentEditingTaskId = null;
         this.currentOverviewTaskId = null;
-        
+
         this.setupEventListeners();
         this.setupModalEventListeners();
     }
@@ -158,7 +158,7 @@ class TaskComponent {
 
     async loadTasks() {
         Utils.showLoading(true);
-        
+
         try {
             this.tasks = await apiService.getTasks();
             this.renderTasks();
@@ -181,13 +181,13 @@ class TaskComponent {
 
     updateCategorySelects() {
         const selects = ['taskCategory', 'editTaskCategory'];
-        
+
         selects.forEach(selectId => {
             const select = document.getElementById(selectId);
             if (!select) return;
-            
+
             select.innerHTML = '<option value="">No Category</option>';
-            
+
             this.categories.forEach(category => {
                 const option = document.createElement('option');
                 option.value = category._id; // Use _id from backend
@@ -199,7 +199,7 @@ class TaskComponent {
 
     async handleCreateTask(e) {
         e.preventDefault();
-        
+
         // Get values directly from form elements using their IDs
         const title = document.getElementById('taskTitle').value?.trim();
         const description = document.getElementById('taskDescription').value?.trim();
@@ -214,6 +214,28 @@ class TaskComponent {
             return;
         }
 
+        // Check if starting as in_progress and there are already active tasks
+        let hasActiveTask = false;
+        let activeTaskName = null;
+        let confirmed = true;
+
+        if (status === 'in_progress') {
+            const activeTasks = this.tasks.filter(t => t.status === 'in_progress');
+            hasActiveTask = activeTasks.length > 0;
+            if (hasActiveTask) {
+                activeTaskName = activeTasks[0].title;
+                confirmed = confirm(
+                    `"${activeTaskName}" is currently active.\n\n` +
+                    `Creating "${title}" as "In Progress" will automatically pause "${activeTaskName}".\n\n` +
+                    `Do you want to continue?`
+                );
+            }
+        }
+
+        if (!confirmed) {
+            return;
+        }
+
         Utils.showLoading(true);
 
         try {
@@ -224,15 +246,34 @@ class TaskComponent {
                 status,
                 notes
             };
-            
+
             if (category) taskData.category = category;
             if (tagsText) taskData.tags = tagsText.split(',').map(tag => tag.trim()).filter(tag => tag);
 
-            await apiService.createTask(taskData);
-            
+            const newTask = await apiService.createTask(taskData);
+
+            // If created as in_progress, start the timer
+            if (status === 'in_progress' && newTask) {
+                // Get the full task details
+                const fullTask = await apiService.getTask(newTask._id || newTask.id);
+                this.app.timer.startTask(fullTask);
+            }
+
             this.clearTaskForm();
             this.loadTasks();
-            Utils.showMessage('taskMessage', 'Task created successfully!', 'success');
+
+            // Provide feedback based on whether there was an active task
+            if (status === 'in_progress' && hasActiveTask) {
+                Utils.showMessage('taskMessage',
+                    `Created and started "${title}", paused "${activeTaskName}"`,
+                    'success');
+            } else if (status === 'in_progress') {
+                Utils.showMessage('taskMessage',
+                    `Created and started "${title}"`,
+                    'success');
+            } else {
+                Utils.showMessage('taskMessage', 'Task created successfully!', 'success');
+            }
         } catch (error) {
             Utils.showMessage('taskMessage', `Failed to create task: ${error.message}`, 'error');
         } finally {
@@ -297,17 +338,24 @@ class TaskComponent {
 
         try {
             await apiService.startTask(taskId);
-            this.app.timer.startTask(task);
+
+            // Get the updated task from the backend to ensure we have latest data
+            const updatedTask = await apiService.getTask(taskId);
+
+            // Start the timer with updated task
+            this.app.timer.startTask(updatedTask);
+
+            // Reload tasks to reflect all changes
             this.loadTasks();
-            
+
             // Provide enhanced feedback based on whether there was an active task
             if (hasActiveTask && activeTaskName !== task.title) {
-                Utils.showMessage('taskMessage', 
-                    `Started "${task.title}" and paused "${activeTaskName}"`, 
+                Utils.showMessage('taskMessage',
+                    `Started "${task.title}" and paused "${activeTaskName}"`,
                     'success');
             } else {
-                Utils.showMessage('taskMessage', 
-                    `Started working on "${task.title}"`, 
+                Utils.showMessage('taskMessage',
+                    `Started working on "${task.title}"`,
                     'success');
             }
         } catch (error) {
@@ -360,11 +408,11 @@ class TaskComponent {
     handleFilter(e) {
         const status = e.target.dataset.status;
         this.currentFilter = status;
-        
+
         // Update active filter button
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         e.target.classList.add('active');
-        
+
         this.renderTasks();
     }
 
@@ -379,7 +427,7 @@ class TaskComponent {
         // Apply search filter
         if (this.searchTerm) {
             const searchLower = this.searchTerm.toLowerCase();
-            filteredTasks = filteredTasks.filter(task => 
+            filteredTasks = filteredTasks.filter(task =>
                 task.title.toLowerCase().includes(searchLower) ||
                 (task.description && task.description.toLowerCase().includes(searchLower)) ||
                 (task.tags && task.tags.some(tag => tag.toLowerCase().includes(searchLower)))
@@ -388,7 +436,7 @@ class TaskComponent {
 
         const tasksList = document.getElementById('tasksList'); // Fixed element ID
         const noTasks = document.getElementById('noTasks');
-        
+
         if (!tasksList) return;
 
         if (filteredTasks.length === 0) {
@@ -399,7 +447,7 @@ class TaskComponent {
 
         if (noTasks) noTasks.style.display = 'none';
         tasksList.innerHTML = filteredTasks.map(task => this.renderTaskItem(task)).join('');
-        
+
         // Bind event listeners
         this.bindTaskEventListeners();
     }
@@ -407,17 +455,17 @@ class TaskComponent {
     renderTaskItem(task) {
         const createdDate = Utils.formatDate(task.created_at);
         const category = task.category ? this.categories.find(c => c._id === task.category) : null; // Use _id from backend
-        const categoryBadge = category ? 
+        const categoryBadge = category ?
             `<span class="task-category-badge" style="background-color: ${category.color}; color: white;">${category.name}</span>` : '';
-        
-        const tags = task.tags && task.tags.length > 0 ? 
+
+        const tags = task.tags && task.tags.length > 0 ?
             `<div class="task-tags">${task.tags.map(tag => `<span class="task-tag">${Utils.escapeHtml(tag)}</span>`).join('')}</div>` : '';
-        
-        const notes = task.notes ? 
+
+        const notes = task.notes ?
             `<div class="task-notes">${Utils.escapeHtml(task.notes)}</div>` : '';
-        
+
         const totalTime = Utils.formatDuration(task.total_time || 0);
-        
+
         return `
             <div class="task-item priority-${task.priority}" data-task-id="${task._id}">
                 <div class="task-header" style="cursor: pointer;" onclick="window.taskComponent.openTaskOverviewModal('${task._id}')" title="Click to view task overview">
@@ -557,11 +605,11 @@ class TaskComponent {
     closeEditModal() {
         document.getElementById('editModal').style.display = 'none';
         this.currentEditingTaskId = null;
-        
+
         // Clear form
         document.getElementById('editTaskForm').reset();
         document.getElementById('taskLinksList').innerHTML = '';
-        
+
         // Clear add link form
         document.getElementById('newLinkUrl').value = '';
         document.getElementById('newLinkTitle').value = '';
@@ -569,7 +617,7 @@ class TaskComponent {
 
     async handleEditTask(e) {
         e.preventDefault();
-        
+
         if (!this.currentEditingTaskId) return;
 
         const formData = new FormData(e.target);
@@ -586,6 +634,32 @@ class TaskComponent {
             return;
         }
 
+        // Get current task to check status changes
+        const currentTask = this.tasks.find(t => t._id === this.currentEditingTaskId);
+        const currentStatus = currentTask ? currentTask.status : null;
+
+        // Check if changing to in_progress and there are already active tasks
+        let hasActiveTask = false;
+        let activeTaskName = null;
+        let confirmed = true;
+
+        if (status === 'in_progress' && currentStatus !== 'in_progress') {
+            const activeTasks = this.tasks.filter(t => t.status === 'in_progress' && t._id !== this.currentEditingTaskId);
+            hasActiveTask = activeTasks.length > 0;
+            if (hasActiveTask) {
+                activeTaskName = activeTasks[0].title;
+                confirmed = confirm(
+                    `"${activeTaskName}" is currently active.\n\n` +
+                    `Changing "${title}" to "In Progress" will automatically pause "${activeTaskName}".\n\n` +
+                    `Do you want to continue?`
+                );
+            }
+        }
+
+        if (!confirmed) {
+            return;
+        }
+
         Utils.showLoading(true);
 
         try {
@@ -596,15 +670,37 @@ class TaskComponent {
                 status,
                 notes
             };
-            
+
             if (category) taskData.category = category;
             if (tagsText) taskData.tags = tagsText.split(',').map(tag => tag.trim()).filter(tag => tag);
 
             await apiService.updateTask(this.currentEditingTaskId, taskData);
-            
+
+            // Handle timer updates based on status changes
+            if (status === 'in_progress' && currentStatus !== 'in_progress') {
+                // Starting the task - update timer
+                const updatedTask = await apiService.getTask(this.currentEditingTaskId);
+                this.app.timer.startTask(updatedTask);
+
+                if (hasActiveTask) {
+                    Utils.showMessage('taskMessage',
+                        `Updated and started "${title}", paused "${activeTaskName}"`,
+                        'success');
+                } else {
+                    Utils.showMessage('taskMessage',
+                        `Updated and started "${title}"`,
+                        'success');
+                }
+            } else if (currentStatus === 'in_progress' && status !== 'in_progress') {
+                // Stopping the task - pause timer
+                this.app.timer.pauseTask();
+                Utils.showMessage('taskMessage', `Updated and paused "${title}"`, 'success');
+            } else {
+                Utils.showMessage('taskMessage', 'Task updated successfully!', 'success');
+            }
+
             this.closeEditModal();
             this.loadTasks();
-            Utils.showMessage('taskMessage', 'Task updated successfully!', 'success');
         } catch (error) {
             Utils.showMessage('taskMessage', `Failed to update task: ${error.message}`, 'error');
         } finally {
@@ -713,7 +809,7 @@ class TaskComponent {
         document.getElementById('overviewTaskTitle').textContent = task.title || 'Untitled Task';
         document.getElementById('overviewTaskStatus').textContent = Utils.formatStatus(task.status);
         document.getElementById('overviewTaskStatus').className = `task-status ${task.status}`;
-        
+
         // Set priority badge
         const priorityBadge = document.getElementById('overviewTaskPriority');
         priorityBadge.textContent = Utils.formatPriority(task.priority);
@@ -730,7 +826,7 @@ class TaskComponent {
         // Tags
         const tagsEl = document.getElementById('overviewTaskTags');
         if (task.tags && task.tags.length > 0) {
-            tagsEl.innerHTML = task.tags.map(tag => 
+            tagsEl.innerHTML = task.tags.map(tag =>
                 `<span class="task-tag">${Utils.escapeHtml(tag)}</span>`
             ).join('');
         } else {
@@ -798,7 +894,7 @@ class TaskComponent {
 
     async loadTaskLinksForOverview(taskId) {
         const linksEl = document.getElementById('overviewTaskLinks');
-        
+
         try {
             if (typeof apiService.getTaskLinks === 'function') {
                 const links = await apiService.getTaskLinks(taskId);

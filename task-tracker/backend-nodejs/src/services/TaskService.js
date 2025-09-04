@@ -42,6 +42,19 @@ class TaskService {
             notes: notes?.trim() || ''
         });
 
+        // If creating task with in_progress status, pause all other user's tasks and start time session
+        if (status === 'in_progress') {
+            await Task.pauseAllForUser(userId);
+            await Task.updateStatus(task._id, 'in_progress'); // Ensure it remains in_progress after pause all
+
+            // Create a new time session
+            await TimeSession.create({
+                task_id: task._id,
+                user_id: userId,
+                start_time: new Date()
+            });
+        }
+
         return task;
     }
 
@@ -50,6 +63,8 @@ class TaskService {
         if (!task) {
             throw new Error('Task not found');
         }
+
+        const oldStatus = task.status;
 
         // Validate updates
         if (updates.priority && !['low', 'medium', 'high'].includes(updates.priority)) {
@@ -63,6 +78,28 @@ class TaskService {
         const success = await Task.update(taskId, updates);
         if (!success) {
             throw new Error('Failed to update task');
+        }
+
+        // Handle status changes
+        if (updates.status && updates.status !== oldStatus) {
+            if (updates.status === 'in_progress') {
+                // If changing to in_progress, pause all other user's tasks and start time session
+                await Task.pauseAllForUser(task.user_id);
+                await Task.updateStatus(taskId, 'in_progress'); // Ensure it remains in_progress after pause all
+
+                // Create a new time session
+                await TimeSession.create({
+                    task_id: taskId,
+                    user_id: task.user_id,
+                    start_time: new Date()
+                });
+            } else if (oldStatus === 'in_progress') {
+                // If changing from in_progress, end the current time session
+                const session = await TimeSession.findActiveByTaskId(taskId);
+                if (session) {
+                    await TimeSession.endSession(session._id);
+                }
+            }
         }
 
         return await Task.findById(taskId);
@@ -84,7 +121,7 @@ class TaskService {
 
     static async startTask(userId, taskId) {
         console.log('Starting task:', { userId, taskId, taskIdType: typeof taskId });
-        
+
         // Check if task exists first
         const existingTask = await Task.findById(taskId);
         console.log('Found task:', existingTask ? 'Yes' : 'No');

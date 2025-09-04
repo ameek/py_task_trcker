@@ -28,7 +28,7 @@ class CategoryController {
         try {
             const userId = req.user.id;
             const category = await CategoryService.createCategory(userId, req.body);
-            
+
             res.status(201).json(category);
         } catch (error) {
             res.status(400).json({
